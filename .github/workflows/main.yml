@@ -20,7 +20,7 @@ jobs:
         run: sudo apt-get install -y ffmpeg
 
       - name: Install Python dependencies
-        run: pip install requests python-dotenv
+        run: pip install requests python-dotenv pillow
 
       - name: Generate reel + caption
         env:
