@@ -1,10 +1,10 @@
 """
-PeakSync — Daily Image Carousel Generator
----------------------------------
+PeakSync — Cycle Nutrition Image Carousel Generator
+--------------------------------------------------
 Each run:
-  - Fetches a portrait-oriented background photo from Pexels
-  - Generates multiple static image slides (.png) with text overlays
-  - Outputs a text file with the matching caption for manual posting
+  - Fetches a portrait-oriented background food/texture photo from Pexels
+  - Generates a sequential 3-slide educational carousel (.png)
+  - Outputs a text file with the matching nutritional caption
 
 Requirements:
     pip install requests python-dotenv pillow
@@ -15,6 +15,7 @@ import json
 import random
 import requests
 import datetime
+import io
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -30,61 +31,79 @@ PEXELS_API_KEY = os.environ["PEXELS_API_KEY"]
 OUTPUT_DIR     = Path("output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Standard font path on Ubuntu runners (Change locally if testing on Mac/Windows)
+# Font setup for Ubuntu runners vs local environments
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
 if not os.path.exists(FONT_PATH):
-    FONT_PATH = "Arial.ttf"  # Fallback for local testing environments
+    FONT_PATH = "Arial.ttf"
 
-# ── Content library ───────────────────────────────────────────────────────────
-# Each entry now splits the overlay text into a list of strings.
-# Each string in the list represents an individual slide in the carousel sequence.
+# ── Nutritional Content Library ───────────────────────────────────────────────
+# Sequentially loops or selects content based on the calendar day.
+# Every topic builds a 3-slide visual story: 1. Context -> 2. Science -> 3. Food Plate
 CONTENT_LIBRARY = [
     {
+        "phase": "Menstrual Phase (Days 1–5)",
         "slides": [
-            "MYTH:\nTrain at maximum\nintensity every day.",
-            "FACT:\nYour luteal phase\ndemands deep rest."
+            "MENSTRUAL PHASE\n\nYour energy is low,\nand iron levels are dipping.\nTime to replenish.",
+            "THE NUTRITIONAL FOCUS\n\nPair non-heme iron\nwith Vitamin C to double\nyour body's absorption.",
+            "ON YOUR PLATE\n\nDark leafy greens,\nlentils, citrus fruits,\nand dark chocolate (70%+)."
         ],
         "hooks": [
-            "Most women push hardest when they feel like it. Smart women push hardest when their hormones say go. 🧠",
-            "Did you know your muscles are literally stronger this week? Here's why… 🧬",
-            "Follicular phase = your body's performance window. Use it. 💪",
+            "If you're feeling completely wiped out on Day 1 or 2 of your period, your body isn't being lazy. It's working overtime. 🩸",
+            "Cramping and fatigue are data. Here is exactly how to feed your body during your bleeding window. 🥑",
         ],
-        "caption_body": "During your follicular phase, estrogen boosts muscle repair, pain tolerance, and recovery speed.\nThat's your window. Every week it comes around — most women never know it exists.",
-        "cta": "👇 Are you already training with your cycle? Drop a 💪 if yes",
-        "pexels_query": "abstract texture minimalist"
+        "caption_body": "During menstruation, your estrogen and progesterone are at their lowest points while your body is actively shedding its uterine lining. Pushing through with caffeine or skipping meals spikes cortisol, making cramps worse.\n\nFocusing on warm, bioavailable, iron-rich foods helps rebuild your mineral stores and stabilizes your baseline metabolic recovery.",
+        "cta": "👇 What is your ultimate comfort food on Day 1? Let me know below!",
+        "pexels_query": "lentil spinach soup bowl rustic"
     },
     {
+        "phase": "Follicular Phase (Days 6–13)",
         "slides": [
-            "MYTH:\nPMS cravings are\na failure of discipline.",
-            "FACT:\nYour dropping serotonin\nis demanding fuel."
+            "FOLLICULAR PHASE\n\nEstrogen is rising.\nYour metabolism is efficient\nand ready for fuel.",
+            "THE NUTRITIONAL FOCUS\n\nSupport your gut health\nto help your liver process and\nmetabolize rising estrogen.",
+            "ON YOUR PLATE\n\nLight, vibrant foods:\nKimchi, quinoa, avocados,\nand lean proteins."
         ],
         "hooks": [
-            "You don't lack discipline. You lack information. 🍫",
-            "Why do you crave sugar and carbs before your period? The answer is hormonal — not personal. 🔬",
-            "PMS cravings aren't weakness. They're biology. Here's proof. 🧪",
+            "Energy shifting upwards? Welcome to your follicular phase. Here is how to fuel the build. ⚡",
+            "Your body is highly insulin-sensitive this week, meaning it processes clean carbohydrates beautifully. 🌾",
         ],
-        "caption_body": "The week before your period, serotonin drops and your body demands more fuel.\nThat craving isn't a character flaw — it's your body asking for help in the only language it knows.",
-        "cta": "👇 What's your go-to craving before your period? Drop it below",
-        "pexels_query": "calm organic background textures"
+        "caption_body": "As follicles develop, estrogen steadily rises, bringing an increase in physical endurance, mental clarity, and muscle recovery speeds.\n\nAdding fermented or gut-friendly components supports the microbiome, ensuring your body processes this upward shift smoothly without leaving you feeling sluggish.",
+        "cta": "👇 Have you noticed your energy kicking in this week? Drop a ⚡ if yes!",
+        "pexels_query": "quinoa grain salad bowl fresh"
     },
     {
+        "phase": "Ovulatory Phase (Days 14–16)",
         "slides": [
-            "MYTH:\nLow energy during your\ncycle means laziness.",
-            "FACT:\nEstrogen and iron crash.\nIt's biological data."
+            "OVULATORY PHASE\n\nEstrogen peaks.\nYour system is running at\nmaximum biological speed.",
+            "THE NUTRITIONAL FOCUS\n\nLoad up on fiber and sulfur\nto support your liver as it\nclears out excess hormones.",
+            "ON YOUR PLATE\n\nCruciferous vegetables:\nBroccoli, Brussels sprouts,\nberries, and raw seeds."
         ],
         "hooks": [
-            "Your body is not broken. It's just in a different phase. 🔄",
-            "Ever feel exhausted during your period and wonder why? Here's the real reason… 😴",
-            "Period fatigue is real. And it has nothing to do with motivation. 💙",
+            "You are at your physiological peak this week. Let's make sure your nutrition matches it. 🔥",
+            "The liver works double time around ovulation to process your estrogen spike. Give it an assist. 🥦",
         ],
-        "caption_body": "Estrogen and progesterone both crash during menstruation. Iron dips. Energy follows.\nThis isn't the week to go hard — it's the week to go smart and come back stronger.",
-        "cta": "👇 Do you rest during your period or push through? Be honest 👇",
-        "pexels_query": "moody dark abstract wall"
+        "caption_body": "At ovulation, estrogen hits its highest threshold. While you might feel naturally less hungry due to testosterone peaks, your liver needs heavy support to metabolize and detoxify these hormones safely.\n\nCruciferous vegetables contain essential compounds that naturally support this pathways, keeping skin clear and transitions smooth.",
+        "cta": "👇 What's your favorite way to prep broccoli or greens? Share below!",
+        "pexels_query": "berry smoothie bowl morning"
+    },
+    {
+        "phase": "Luteal Phase (Days 17–28)",
+        "slides": [
+            "LUTEAL PHASE\n\nProgesterone takes over.\nYour resting metabolism naturally\nspeeds up.",
+            "THE NUTRITIONAL FOCUS\n\nKeep blood sugar stable\nto completely bypass intense\nPMS mood and sugar cravings.",
+            "ON YOUR PLATE\n\nSlow-burning complex carbs:\nRoasted sweet potatoes,\nsquash, poultry, and walnuts."
+        ],
+        "hooks": [
+            "PMS sugar cravings are not a character flaw. They are simple biology. 🧠",
+            "Feeling anxious or craving carbs before your period? Your progesterone is demanding stable fuel. 🍠",
+        ],
+        "caption_body": "During the luteal phase, progesterone takes over to preserve the uterine lining, raising your resting core temperature and burning more baseline calories. This triggers a biological demand for energy.\n\nFeeding that demand with rapid spikes (like processed sugars) leads to steep crashes that worsen irritability and bloating. Opting for complex, grounding root vegetables gives you steady, sustained release.",
+        "cta": "👇 Save this post for your next pre-period week! 💾",
+        "pexels_query": "roasted sweet potato wedges"
     }
 ]
 
-APP_TEASER = "App coming soon — follow to be first in. 🌸"
-HASHTAGS   = "#PeakSync #CycleSyncing #BodyLiteracy #KnowYourBody #CycleAwareness #HormoneHealth #WomensHealth #TrainSmart"
+APP_TEASER = "Track your biology. Fuel your potential. App coming soon. 🌸"
+HASHTAGS   = "#PeakSync #CycleSyncing #HormoneNutrition #PeriodHealth #WomenWhoTrain #BodyLiteracy #LutealPhase #BiohackingWomen"
 
 
 # ── Step 1: Pick Content ──────────────────────────────────────────────────────
@@ -96,7 +115,7 @@ def pick_content() -> dict:
 
     caption = f"""{hook}\n\n{topic['caption_body']}\n\n{topic['cta']}\n\n{APP_TEASER}\n\n{HASHTAGS}"""
 
-    print(f"✅ Picked Topic: {topic['slides'][0].splitlines()[0]}")
+    print(f"✅ Selected Phase: {topic['phase']}")
     return {
         "slides": topic["slides"],
         "caption": caption,
@@ -106,92 +125,82 @@ def pick_content() -> dict:
 
 # ── Step 2: Fetch Pexels Image ────────────────────────────────────────────────
 
-def fetch_pexels_image(query: str) -> str:
-    """ Fetches a high-quality portrait image from Pexels API """
+def fetch_pexels_image(query: str) -> bytes:
     resp = requests.get(
         "https://api.pexels.com/v1/search",
         headers={"Authorization": PEXELS_API_KEY},
-        params={"query": query, "orientation": "portrait", "per_page": 10},
+        params={"query": query, "orientation": "portrait", "per_page": 5},
         timeout=15,
     )
     resp.raise_for_status()
     photos = resp.json().get("photos", [])
     if not photos:
-        raise ValueError(f"No Pexels images found for query: {query}")
+        # Generic elegant fallback if a specific food query is empty
+        print("⚠️ Specific query yielded no results. Using aesthetic fallback.")
+        return fetch_pexels_image("minimalist lifestyle background")
     
-    # Pick randomly from top entries to ensure variety across runs
-    photo = random.choice(photos[:5])
-    # Fetch the large/portrait-sized version URL
+    photo = random.choice(photos)
     image_url = photo["src"]["large2x"]
     
-    # Download directly into memory
-    img_data = requests.get(image_url, timeout=30).content
-    print(f"✅ Background texture selected from Pexels")
-    return img_data
+    return requests.get(image_url, timeout=30).content
 
 
-# ── Step 3: Draw Typography & Content Text overlays ─────────────────────────
+# ── Step 3: Render Slides ─────────────────────────────────────────────────────
 
-def generate_carousel_slides(image_bytes: bytes, slides_text: list[str]) -> list[str]:
-    """ Overlays text onto the fetched image and cuts them out as clean slides """
+def generate_carousel_images(image_bytes: bytes, slides_text: list[str]) -> list[str]:
     date_str = datetime.date.today().isoformat()
     generated_paths = []
-
-    # Target social canvas size (Standard 1080x1920 Instagram Stories/Reels aspect)
+    
     target_w, target_h = 1080, 1920
     
-    # Load base image safely from the downloaded bytes data stream
-    import io
     base_img = Image.open(io.BytesIO(image_bytes))
-    
-    # Resize and crop to center background perfectly at 1080x1920
     base_img = base_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
     for idx, text in enumerate(slides_text):
-        # Create a clean copy of the base background asset for each separate slide frame
         slide_img = base_img.copy()
         draw = ImageDraw.Draw(slide_img, "RGBA")
         
-        # Initialize text styling fonts
         try:
-            font = ImageFont.truetype(FONT_PATH, size=64)
+            font = ImageFont.truetype(FONT_PATH, size=56)
         except IOError:
             font = ImageFont.load_default()
 
-        # Add a subtle transparent overlay layer across the entire image to step up legibility
-        draw.rectangle([0, 0, target_w, target_h], fill=(0, 0, 0, 80))
+        # Premium semi-transparent overlay to keep text hyper-legible over food shots
+        draw.rectangle([0, 0, target_w, target_h], fill=(15, 23, 23, 140))
 
-        # Calculate bounding box positions to center multi-line text blocks manually
+        # Center layout text engine
         lines = text.splitlines()
-        total_text_height = sum([draw.textbbox((0, 0), line, font=font)[3] for line in lines]) + (len(lines) * 20)
-        
+        total_text_height = sum([draw.textbbox((0, 0), line if line.strip() else "A", font=font)[3] for line in lines]) + (len(lines) * 25)
         current_y = (target_h - total_text_height) // 2
         
         for line in lines:
-            # Measure specific line widths to guarantee horizontal alignment
+            if not line.strip():
+                current_y += 40  # Support double line breaks in text block
+                continue
+                
             bbox = draw.textbbox((0, 0), line, font=font)
             line_w = bbox[2] - bbox[0]
             line_h = bbox[3] - bbox[1]
             
             x_pos = (target_w - line_w) // 2
             
-            # Write text drop shadow line for better reading contrast on textured photos
-            draw.text((x_pos + 3, current_y + 3), line, font=font, fill=(0, 0, 0, 180))
-            # Main font text write
+            # Subtle branding shadow
+            draw.text((x_pos + 2, current_y + 2), line, font=font, fill=(0, 0, 0, 120))
+            # Main typography
             draw.text((x_pos, current_y), line, font=font, fill=(255, 255, 255, 255))
             
-            current_y += line_h + 35 # Row padding height modifier
+            current_y += line_h + 35
 
-        # Export completed frame directly to local directory path
-        slide_filename = OUTPUT_DIR / f"slide_{date_str}_{idx + 1}.png"
-        slide_img.save(slide_filename, "PNG")
-        generated_paths.append(str(slide_filename))
-        print(f"   ↳ Slide {idx + 1} generated successfully: {slide_filename.name}")
+        # Save out frame
+        filename = OUTPUT_DIR / f"slide_{date_str}_{idx + 1}.png"
+        slide_img.save(filename, "PNG")
+        generated_paths.append(str(filename))
+        print(f"   ↳ Generated Slide {idx + 1}: {filename.name}")
 
     return generated_paths
 
 
-# ── Step 4: Output Context Script ─────────────────────────────────────────────
+# ── Step 4: Write Outputs ─────────────────────────────────────────────────────
 
 def save_caption(caption: str) -> str:
     date_str = datetime.date.today().isoformat()
@@ -202,15 +211,15 @@ def save_caption(caption: str) -> str:
 
 
 def run():
-    print(f"\n🌸 PeakSync Content Engine — {datetime.date.today()}\n{'─'*45}")
+    print(f"\n🌸 PeakSync Nutrition Content Engine — {datetime.date.today()}\n{'─'*50}")
     
     content = pick_content()
-    image_raw_bytes = fetch_pexels_image(content["pexels_query"])
-    slide_files = generate_carousel_slides(image_raw_bytes, content["slides"])
+    image_data = fetch_pexels_image(content["pexels_query"])
+    slide_files = generate_carousel_images(image_data, content["slides"])
     caption_path = save_caption(content["caption"])
 
     print(f"\n┌──────────────────────────────────────────────────┐")
-    print(f"│  ✅ Carousel Assets Export Complete               │")
+    print(f"│  ✅ Carousel Assets Ready for Download            │")
     print(f"├──────────────────────────────────────────────────┤")
     for s_file in slide_files:
         print(f"│  📷 {Path(s_file).name:<44} │")
