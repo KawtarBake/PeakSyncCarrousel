@@ -17,7 +17,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install FFmpeg
-        run: sudo apt-get install -y ffmpeg
+        run: sudo apt-get install -y ffmpeg --fix-missing
 
       - name: Install Python dependencies
         run: pip install requests python-dotenv pillow
